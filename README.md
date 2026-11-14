@@ -8,6 +8,7 @@
 
 ## 1. Project Overview
 
+
 SoilCycle by Earth2Farm is a technology-driven agricultural decision-support platform designed to help smallholder farmers make informed crop rotation and soil management decisions using NASA Earth observations, local soil information, crop characteristics, and farmer priorities.
 
 The project aims to address challenges associated with changing rainfall patterns, rising temperatures, water availability, declining soil health, and unsustainable cropping practices.

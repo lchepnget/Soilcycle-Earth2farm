@@ -11,11 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var (
-	ErrCropNotFound  = errors.New("crop not found")
-	ErrDuplicateCrop = errors.New("crop already exists")
-)
-
 type CropRepository struct {
 	db *pgxpool.Pool
 }

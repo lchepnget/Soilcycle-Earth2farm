@@ -2,7 +2,6 @@ package crops
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/google/uuid"
@@ -35,7 +34,7 @@ func (s *CropService) Create(ctx context.Context, req CreateCropRequest) (*Crop,
 func (s *CropService) GetByID(ctx context.Context, id string) (*Crop, error) {
 	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, errors.New("invalid crop ID")
+		return nil, NewValidationError("invalid crop ID")
 	}
 
 	return s.repo.GetByID(ctx, parsedID)
@@ -95,7 +94,7 @@ func (s *CropService) Update(
 
 	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, errors.New("invalid crop ID")
+		return nil, NewValidationError("invalid crop ID")
 	}
 
 	if err := req.Validate(); err != nil {
@@ -108,7 +107,7 @@ func (s *CropService) Update(
 func (s *CropService) Delete(ctx context.Context, id string) error {
 	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return errors.New("invalid crop ID")
+		return NewValidationError("invalid crop ID")
 	}
 
 	return s.repo.Delete(ctx, parsedID)
@@ -121,7 +120,7 @@ func (s *CropService) GetCharacteristics(
 
 	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, errors.New("invalid crop ID")
+		return nil, NewValidationError("invalid crop ID")
 	}
 
 	return s.repo.GetCharacteristics(ctx, parsedID)
@@ -135,7 +134,7 @@ func (s *CropService) UpsertCharacteristics(
 
 	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, errors.New("invalid crop ID")
+		return nil, NewValidationError("invalid crop ID")
 	}
 
 	if err := req.Validate(); err != nil {

@@ -1,9 +1,6 @@
 package crops
 
-import (
-	"errors"
-	"strings"
-)
+import "strings"
 
 type CreateCropRequest struct {
 	Name           string  `json:"name"`
@@ -33,11 +30,11 @@ func (r *CreateCropRequest) Validate() error {
 	r.Name = strings.TrimSpace(r.Name)
 
 	if r.Name == "" {
-		return errors.New("crop name is required")
+		return NewValidationError("crop name is required")
 	}
 
 	if len(r.Name) > 100 {
-		return errors.New("crop name cannot exceed 100 characters")
+		return NewValidationError("crop name cannot exceed 100 characters")
 	}
 
 	return nil
@@ -47,11 +44,11 @@ func (r *UpdateCropRequest) Validate() error {
 	r.Name = strings.TrimSpace(r.Name)
 
 	if r.Name == "" {
-		return errors.New("crop name is required")
+		return NewValidationError("crop name is required")
 	}
 
 	if len(r.Name) > 100 {
-		return errors.New("crop name cannot exceed 100 characters")
+		return NewValidationError("crop name cannot exceed 100 characters")
 	}
 
 	return nil
@@ -59,7 +56,7 @@ func (r *UpdateCropRequest) Validate() error {
 
 func (r *CropCharacteristicRequest) Validate() error {
 	if r.GrowthDurationDays != nil && *r.GrowthDurationDays <= 0 {
-		return errors.New("growth duration must be greater than zero")
+		return NewValidationError("growth duration must be greater than zero")
 	}
 
 	if r.WaterRequirement != nil {
@@ -67,7 +64,7 @@ func (r *CropCharacteristicRequest) Validate() error {
 		switch value {
 		case "low", "medium", "high":
 		default:
-			return errors.New("water requirement must be low, medium or high")
+			return NewValidationError("water requirement must be low, medium or high")
 		}
 	}
 
@@ -76,7 +73,7 @@ func (r *CropCharacteristicRequest) Validate() error {
 		switch value {
 		case "low", "medium", "high":
 		default:
-			return errors.New("nutrient demand must be low, medium or high")
+			return NewValidationError("nutrient demand must be low, medium or high")
 		}
 	}
 

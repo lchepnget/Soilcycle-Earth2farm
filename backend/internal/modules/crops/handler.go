@@ -183,13 +183,12 @@ func respondError(c fiber.Ctx, err error) error {
 		})
 
 	default:
-		// Log the actual error server-side in production.
-		var validationError interface{ Error() string }
+		var validationError *ValidationError
 
 		if errors.As(err, &validationError) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"success": false,
-				"message": err.Error(),
+				"message": validationError.Error(),
 			})
 		}
 

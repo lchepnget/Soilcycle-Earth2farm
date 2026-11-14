@@ -12,8 +12,11 @@ import (
 )
 
 var (
-	ErrCropNotFound  = errors.New("crop not found")
-	ErrDuplicateCrop = errors.New("crop already exists")
+	ErrCropNotFound                = errors.New("crop not found")
+	ErrCropCharacteristicsNotFound = errors.New("crop characteristics not found")
+	ErrDuplicateCrop               = errors.New("crop already exists")
+	ErrInvalidCropID               = errors.New("invalid crop ID")
+	ErrInvalidCropInput            = errors.New("invalid crop input")
 )
 
 type CropRepository struct {
@@ -252,7 +255,23 @@ func (r *CropRepository) GetCharacteristics(
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrCropNotFound
+		var cropExists bool
+
+		err = r.db.QueryRow(
+			ctx,
+			`SELECT EXISTS(SELECT 1 FROM crops WHERE id = $1)`,
+			cropID,
+		).Scan(&cropExists)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if !cropExists {
+			return nil, ErrCropNotFound
+		}
+
+		return nil, ErrCropCharacteristicsNotFound
 	}
 
 	if err != nil {

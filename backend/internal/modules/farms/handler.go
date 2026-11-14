@@ -163,16 +163,16 @@ func farmError(c fiber.Ctx, err error) error {
 			"message": "Farm not found",
 		})
 
-	case errors.Is(err, ErrFarmerMissing):
-		return c.Status(404).JSON(fiber.Map{
+	case errors.Is(err, ErrInvalidFarmID):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
-			"message": "Farmer does not exist",
+			"message": "Invalid farm ID",
 		})
 
-	case errors.Is(err, ErrInvalidFarmInput):
-		return c.Status(400).JSON(fiber.Map{
+	case errors.Is(err, ErrInvalidFarmerID):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
-			"message": err.Error(),
+			"message": "Invalid farmer ID",
 		})
 
 	default:

@@ -26,7 +26,7 @@ type CropListResult struct {
 
 func (s *CropService) Create(ctx context.Context, req CreateCropRequest) (*Crop, error) {
 	if err := req.Validate(); err != nil {
-		return nil, err
+		return nil, errors.Join(ErrInvalidCropInput, err)
 	}
 
 	return s.repo.Create(ctx, req)
@@ -95,7 +95,7 @@ func (s *CropService) Update(
 
 	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, errors.New("invalid crop ID")
+		return nil, ErrInvalidCropID
 	}
 
 	if err := req.Validate(); err != nil {
@@ -108,7 +108,7 @@ func (s *CropService) Update(
 func (s *CropService) Delete(ctx context.Context, id string) error {
 	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return errors.New("invalid crop ID")
+		return ErrInvalidCropID
 	}
 
 	return s.repo.Delete(ctx, parsedID)

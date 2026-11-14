@@ -176,26 +176,34 @@ func respondError(c fiber.Ctx, err error) error {
 			"message": "Crop not found",
 		})
 
+	case errors.Is(err, ErrCropCharacteristicsNotFound):
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"success": false,
+			"message": "Crop characteristics not found",
+		})
+
 	case errors.Is(err, ErrDuplicateCrop):
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
 			"success": false,
-			"message": "A crop with this name already exists",
+			"message": "Crop already exists",
+		})
+
+	case errors.Is(err, ErrInvalidCropID):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid crop ID",
+		})
+
+	case errors.Is(err, ErrInvalidCropInput):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": err.Error(),
 		})
 
 	default:
-		// Log the actual error server-side in production.
-		var validationError interface{ Error() string }
-
-		if errors.As(err, &validationError) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"success": false,
-				"message": err.Error(),
-			})
-		}
-
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
-			"message": "An internal server error occurred",
+			"message": "Internal server error",
 		})
 	}
 }

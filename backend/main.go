@@ -10,8 +10,10 @@ import (
 	"github.com/soilcycle-earth2farm/backend/internal/config"
 	"github.com/soilcycle-earth2farm/backend/internal/database"
 	"github.com/soilcycle-earth2farm/backend/internal/modules/crops"
+	"github.com/soilcycle-earth2farm/backend/internal/modules/earthdata"
 	"github.com/soilcycle-earth2farm/backend/internal/modules/farmers"
 	"github.com/soilcycle-earth2farm/backend/internal/modules/farms"
+	"github.com/soilcycle-earth2farm/backend/internal/modules/rotation"
 	"github.com/soilcycle-earth2farm/backend/internal/modules/soil"
 )
 
@@ -44,6 +46,8 @@ func main() {
 	farmers.RegisterRoutes(api, db)
 	farms.RegisterRoutes(api, db)
 	soil.RegisterRoutes(api, db)
+	rotation.RegisterRoutes(api, db)
+	earthdata.RegisterRoutes(api)
 
 	app.Get("/", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{

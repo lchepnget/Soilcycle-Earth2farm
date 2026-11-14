@@ -7,7 +7,11 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrInvalidFarmInput = errors.New("invalid farm input")
+var (
+	ErrInvalidFarmInput = errors.New("invalid farm input")
+	ErrInvalidFarmID    = errors.New("invalid farm ID")
+	ErrInvalidFarmerID  = errors.New("invalid farmer ID")
+)
 
 type FarmService struct {
 	repo *FarmRepository
@@ -44,7 +48,7 @@ func (s *FarmService) GetByID(
 
 	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, errors.New("invalid farm ID")
+		return nil, ErrInvalidFarmID
 	}
 
 	return s.repo.GetByID(ctx, parsedID)
@@ -73,9 +77,8 @@ func (s *FarmService) List(
 	if userID != "" {
 		id, err := uuid.Parse(userID)
 		if err != nil {
-			return nil, errors.New("invalid farmer ID")
+			return nil, ErrInvalidFarmerID
 		}
-
 		ownerID = &id
 	}
 
@@ -111,14 +114,13 @@ func (s *FarmService) Update(
 
 	farmID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, errors.New("invalid farm ID")
+		return nil, ErrInvalidFarmID
 	}
 
 	ownerID, err := uuid.Parse(userID)
 	if err != nil {
-		return nil, errors.New("invalid farmer ID")
+		return nil, ErrInvalidFarmerID
 	}
-
 	if err := req.Validate(); err != nil {
 		return nil, errors.Join(ErrInvalidFarmInput, err)
 	}
@@ -133,12 +135,12 @@ func (s *FarmService) Delete(
 
 	farmID, err := uuid.Parse(id)
 	if err != nil {
-		return errors.New("invalid farm ID")
+		return ErrInvalidFarmID
 	}
 
 	ownerID, err := uuid.Parse(userID)
 	if err != nil {
-		return errors.New("invalid farmer ID")
+		return ErrInvalidFarmerID
 	}
 
 	return s.repo.Delete(ctx, farmID, ownerID)

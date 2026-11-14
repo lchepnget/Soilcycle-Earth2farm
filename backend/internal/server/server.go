@@ -16,18 +16,29 @@ import (
 // New creates the configured Fiber application and registers all API routes.
 func New(db *pgxpool.Pool) *fiber.App {
 	app := fiber.New(fiber.Config{
-		AppName:               "SoilCycle by Earth2Farm",
-		ReadTimeout:           10 * time.Second,
-		WriteTimeout:          15 * time.Second,
-		IdleTimeout:           60 * time.Second,
-		DisableStartupMessage: true,
+		AppName:      "SoilCycle by Earth2Farm",
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	})
 
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+		AllowHeaders: []string{
+			"Origin",
+			"Content-Type",
+			"Accept",
+			"Authorization",
+		},
+		AllowMethods: []string{
+			"GET",
+			"POST",
+			"PUT",
+			"PATCH",
+			"DELETE",
+			"OPTIONS",
+		},
 	}))
 
 	RegisterRoutes(app, db)
@@ -38,6 +49,7 @@ func New(db *pgxpool.Pool) *fiber.App {
 // Cancellation triggers a bounded graceful shutdown.
 func Listen(ctx context.Context, app *fiber.App, address string) error {
 	listenErr := make(chan error, 1)
+
 	go func() {
 		listenErr <- app.Listen(address)
 	}()
@@ -48,12 +60,15 @@ func Listen(ctx context.Context, app *fiber.App, address string) error {
 			return fmt.Errorf("listen on %s: %w", address, err)
 		}
 		return nil
+
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+
 		if err := app.ShutdownWithContext(shutdownCtx); err != nil {
 			return fmt.Errorf("graceful server shutdown: %w", err)
 		}
+
 		select {
 		case err := <-listenErr:
 			if err != nil && !errors.Is(err, context.Canceled) {
@@ -61,6 +76,7 @@ func Listen(ctx context.Context, app *fiber.App, address string) error {
 			}
 		default:
 		}
+
 		return nil
 	}
 }

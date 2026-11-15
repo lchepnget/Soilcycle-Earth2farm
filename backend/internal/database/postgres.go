@@ -3,6 +3,8 @@ package database
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,17 +13,18 @@ import (
 )
 
 func Connect(cfg *config.Config) (*pgxpool.Pool, error) {
-	dsn := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		cfg.DBUser,
-		cfg.DBPassword,
-		cfg.DBHost,
-		cfg.DBPort,
-		cfg.DBName,
-		cfg.DBSSLMode,
-	)
+	connectionURL := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(cfg.DBUser, cfg.DBPassword),
+		Host:   net.JoinHostPort(cfg.DBHost, cfg.DBPort),
+		Path:   "/" + cfg.DBName,
+	}
 
-	poolConfig, err := pgxpool.ParseConfig(dsn)
+	query := url.Values{}
+	query.Set("sslmode", cfg.DBSSLMode)
+	connectionURL.RawQuery = query.Encode()
+
+	poolConfig, err := pgxpool.ParseConfig(connectionURL.String())
 	if err != nil {
 		return nil, fmt.Errorf("parse database config: %w", err)
 	}

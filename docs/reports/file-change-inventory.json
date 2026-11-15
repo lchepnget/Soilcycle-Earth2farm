@@ -1,0 +1,28 @@
+{
+  "original_non_git_files": 54,
+  "final_packaged_files": 69,
+  "added": [
+    "docs/FRONTEND_SETUP.md",
+    "docs/INTEGRATION_AUDIT.md",
+    "docs/TEST_REPORT.md",
+    "frontend/.env.example",
+    "frontend/index.html",
+    "frontend/package.json",
+    "frontend/src/App.tsx",
+    "frontend/src/lib/api.ts",
+    "frontend/src/main.tsx",
+    "frontend/src/styles.css",
+    "frontend/src/vite-env.d.ts",
+    "frontend/tests/app.test.tsx",
+    "frontend/tests/setup.ts",
+    "frontend/tsconfig.json",
+    "frontend/vite.config.ts"
+  ],
+  "modified": [
+    ".gitignore"
+  ],
+  "removed": [],
+  "preserved_unchanged_count": 53,
+  "final_packaged_files_including_inventory_report": 70,
+  "inventory_note": "This inventory lists the 69 project files present before the inventory JSON itself was written; the inventory JSON is the 70th packaged file."
+}

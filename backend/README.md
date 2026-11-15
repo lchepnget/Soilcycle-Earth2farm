@@ -242,7 +242,7 @@ JOIN crop_characteristics cc
 ON c.id = cc.crop_id;
 ```
 
-Seven crop-characteristics records were inserted and verified during development.
+Historical development notes mention seven crop-characteristics records. The reproducible starter catalogue is provided by the migration described in the Crops Module section below; it is not applied automatically.
 
 ### Exit PostgreSQL
 
@@ -588,6 +588,18 @@ Verified response:
 404 Not Found
 ```
 
+### Applying the Kenyan starter catalogue
+
+The idempotent migration `internal/database/migrations/002_kenyan_starter_crop_catalogue.sql` seeds the starter crop records and their characteristics after the initial schema migration. It does not update existing crop records or characteristics and is not run automatically.
+
+After reviewing the SQL, run this from the repository root in Windows PowerShell to apply it to the documented development container:
+
+```powershell
+cmd.exe /c "docker exec -i soilcycle-db psql -v ON_ERROR_STOP=1 -U soilcycle -d soilcycle < backend\internal\database\migrations\002_kenyan_starter_crop_catalogue.sql"
+```
+
+The recorded durations and low/medium/high categories are indicative catalogue heuristics, not universal agronomic prescriptions. Season suitability is unset because planting calendars vary by county and production system.
+
 ---
 
 # 11. Earthdata Module
@@ -781,19 +793,7 @@ These are development test values, not verified laboratory measurements.
 
 ### Crop characteristics
 
-Seven crop-characteristics records were inserted directly into the development database.
-
-They include:
-
-- Beans
-- Cowpeas
-- Groundnuts
-- Maize
-- Millet
-- Rice
-- Sorghum
-
-These records should be maintained in a database seed script or migration so they can be recreated in another environment.
+Earlier development records included beans, cowpeas, groundnuts, maize, millet, rice and sorghum. The reviewed starter catalogue is maintained in `internal/database/migrations/002_kenyan_starter_crop_catalogue.sql`; apply that migration manually as described in the Crops Module section.
 
 ---
 

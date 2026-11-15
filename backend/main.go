@@ -35,13 +35,8 @@ func main() {
 	// API versioning
 	api := app.Group("/api/v1")
 
-	// Register Crop API
+	// Register API routes
 
-	crops.RegisterRoutes(api, db)
-	farmers.RegisterRoutes(api, db)
-	farms.RegisterRoutes(api, db)
-
-	crops.RegisterRoutes(api, db)
 	crops.RegisterRoutes(api, db)
 	farmers.RegisterRoutes(api, db)
 	farms.RegisterRoutes(api, db)

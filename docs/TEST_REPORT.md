@@ -19,3 +19,51 @@ Date: 2026-11-14
 - A `package-lock.json` could not be generated without npm registry access. The package manifest pins direct dependency versions; run `npm install` in a network-enabled environment and commit the resulting lockfile before treating installs as reproducible.
 - Backend tests and runtime verification require Go 1.26.8 or the toolchain version declared by the project. The supplied environment has Go 1.23.2.
 - Authentication and ownership enforcement gaps are documented in `INTEGRATION_AUDIT.md`. Do not deploy this project with real farmer data until those backend gaps are resolved.
+
+## Follow-up verification — 15 November 2026
+
+### Frontend verification results
+
+| Check | Command | Result | Notes |
+|---|---|---|---|
+| Dependency installation | `npm ci` | PASS | Dependencies installed successfully. |
+| Baseline unit tests | `npm test` | PASS | Original suite: 1 test passed. |
+| Type checking | `npm run typecheck` | PASS | No TypeScript errors. |
+| Production build | `npm run build` | PASS | Production build completed. |
+| Production dependency audit | `npm audit --omit=dev` | PASS | Zero reported vulnerabilities. |
+| Full dependency audit | `npm audit` | FAIL | Three vulnerabilities in development/test dependencies: one moderate and two critical. |
+| Registration regression test | `npx vitest run tests/registration.test.tsx` | FAIL — defect reproduced | Registration API was called despite both email and phone being empty. |
+
+### Confirmed defect: Missing registration validation
+
+- **Area:** Farmer registration
+- **Suggested severity:** Medium
+- **Status:** Reproduced; awaiting correction.
+
+The backend contract in `backend/internal/modules/farmers/dto.go` requires either an email address or a phone number.
+
+The frontend currently permits both fields to be empty and still submits the registration request.
+
+The regression test in `frontend/tests/registration.test.tsx` reproduced the issue: `api.register()` was called once when it should not have been called.
+
+**Expected behaviour:** The frontend should prevent submission and display a clear validation message when both contact fields are empty.
+
+**Recommended action:** Frontend developers should implement this validation. QA will rerun the regression test after the correction.
+
+### Security findings
+
+The production dependency audit reported zero vulnerabilities. The full audit reported three vulnerabilities in development/test dependencies, including two critical findings. Developer review and remediation are outstanding. QA has not applied forced dependency upgrades.
+
+### Outstanding QA actions
+
+1. Frontend developers to correct registration validation.
+2. QA to rerun the regression test.
+3. QA to rerun the full frontend test suite, type check and production build.
+4. Developers to review the dependency audit findings.
+5. Complete live frontend/backend integration testing.
+
+### QA conclusion
+
+The frontend baseline tests, type check and production build passed. However, targeted testing identified a reproducible registration validation defect. Development dependency vulnerabilities also remain outstanding.
+
+**Recommendation:** The registration workflow should not be considered fully verified until the defect is corrected and the regression test passes.

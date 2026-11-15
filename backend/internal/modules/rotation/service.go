@@ -12,10 +12,23 @@ import (
 )
 
 type Service struct {
-	repo *Repository
+	repo rotationRepository
 }
 
-func NewService(repo *Repository) *Service {
+type rotationRepository interface {
+	FarmExists(context.Context, uuid.UUID) (bool, error)
+	ListAvailableCrops(context.Context) ([]cropCandidate, error)
+	ListCropHistory(context.Context, uuid.UUID) ([]cropHistory, error)
+	CreatePlan(context.Context, *RotationPlan) error
+	SaveResults(context.Context, []RotationResult) error
+	GetResultsByPlan(context.Context, uuid.UUID) ([]RotationResult, error)
+	GetPlanByID(context.Context, uuid.UUID) (*RotationPlan, error)
+	ListPlansByFarm(context.Context, uuid.UUID, int, int) ([]RotationPlan, error)
+}
+
+var errInsufficientCrops = errors.New("insufficient crop catalogue")
+
+func NewService(repo rotationRepository) *Service {
 	return &Service{
 		repo: repo,
 	}
@@ -61,7 +74,7 @@ func (s *Service) GenerateRotation(
 		return nil, nil, errors.New("farm not found")
 	}
 
-	crops, err := s.getAvailableCrops(ctx)
+	crops, err := s.repo.ListAvailableCrops(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -70,7 +83,26 @@ func (s *Service) GenerateRotation(
 		return nil, nil, errors.New("no crops available for rotation planning")
 	}
 
-	history, err := s.getCropHistory(ctx, farmID)
+	if len(crops) < req.NumberOfSeasons {
+		return nil, nil, fmt.Errorf(
+			"%w: requested %d seasons but only %d distinct crops are available",
+			errInsufficientCrops,
+			req.NumberOfSeasons,
+			len(crops),
+		)
+	}
+
+	history, err := s.repo.ListCropHistory(ctx, farmID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	results, err := buildRotationOptions(
+		crops,
+		history,
+		req.NumberOfSeasons,
+		req.FarmerPriorities,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -85,7 +117,8 @@ func (s *Service) GenerateRotation(
 		"engine":       "rule_based_v1",
 		"data_limitations": []string{
 			"Recommendations depend on available crop records and characteristics.",
-			"Climate and soil suitability are not yet incorporated into scoring.",
+			"Climate observations and measured soil data are not used in selection or scoring.",
+			"The climate score is a fixed provisional placeholder, not a climate-suitability measurement.",
 			"Recommendations require local agronomic validation.",
 		},
 	}
@@ -106,16 +139,8 @@ func (s *Service) GenerateRotation(
 		return nil, nil, err
 	}
 
-	results := s.buildRotationOptions(
-		crops,
-		history,
-		req.NumberOfSeasons,
-		req.FarmerPriorities,
-		plan.ID,
-	)
-
-	if len(results) == 0 {
-		return plan, nil, errors.New("could not generate rotation options")
+	for i := range results {
+		results[i].PlanID = plan.ID
 	}
 
 	if err := s.repo.SaveResults(ctx, results); err != nil {
@@ -201,153 +226,75 @@ func (s *Service) ListFarmPlans(
 	return s.repo.ListPlansByFarm(ctx, id, limit, offset)
 }
 
-// getAvailableCrops retrieves crops and their characteristics.
-func (s *Service) getAvailableCrops(
-	ctx context.Context,
-) ([]cropCandidate, error) {
+type rotationStrategy int
 
-	rows, err := s.repo.db.Query(
-		ctx,
-		`SELECT
-			c.id,
-			c.name,
-			COALESCE(c.crop_family, ''),
-			COALESCE(c.category, ''),
-			COALESCE(cc.nitrogen_fixing, FALSE),
-			COALESCE(cc.water_requirement, ''),
-			COALESCE(cc.nutrient_demand, ''),
-			cc.growth_duration_days
-		FROM crops c
-		LEFT JOIN crop_characteristics cc ON cc.crop_id = c.id
-		ORDER BY c.name`,
-	)
+const (
+	balancedRotation rotationStrategy = iota
+	soilRestorationRotation
+	waterConsciousRotation
+)
 
-	if err != nil {
-		return nil, fmt.Errorf("retrieve available crops: %w", err)
-	}
-
-	defer rows.Close()
-
-	crops := make([]cropCandidate, 0)
-
-	for rows.Next() {
-		var crop cropCandidate
-
-		err := rows.Scan(
-			&crop.ID,
-			&crop.Name,
-			&crop.Family,
-			&crop.Category,
-			&crop.NitrogenFixing,
-			&crop.WaterRequirement,
-			&crop.NutrientDemand,
-			&crop.GrowthDuration,
-		)
-
-		if err != nil {
-			return nil, fmt.Errorf("scan crop: %w", err)
-		}
-
-		crops = append(crops, crop)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate crops: %w", err)
-	}
-
-	return crops, nil
+type rotationStrategyOption struct {
+	name     string
+	strategy rotationStrategy
 }
 
-// getCropHistory retrieves crops previously grown on a farm.
-func (s *Service) getCropHistory(
-	ctx context.Context,
-	farmID uuid.UUID,
-) ([]cropHistory, error) {
-
-	rows, err := s.repo.db.Query(
-		ctx,
-		`SELECT
-			fc.crop_id,
-			COALESCE(c.crop_family, '')
-		FROM farm_crops fc
-		JOIN crops c ON c.id = fc.crop_id
-		WHERE fc.farm_id = $1
-		ORDER BY fc.planting_date DESC NULLS LAST, fc.created_at DESC
-		LIMIT 10`,
-		farmID,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("retrieve farm crop history: %w", err)
-	}
-
-	defer rows.Close()
-
-	history := make([]cropHistory, 0)
-
-	for rows.Next() {
-		var item cropHistory
-
-		if err := rows.Scan(&item.CropID, &item.Family); err != nil {
-			return nil, fmt.Errorf("scan crop history: %w", err)
-		}
-
-		history = append(history, item)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate crop history: %w", err)
-	}
-
-	return history, nil
-}
-
-// buildRotationOptions generates three alternative rotation strategies.
-func (s *Service) buildRotationOptions(
+// buildRotationOptions generates complete alternatives using the available catalogue.
+func buildRotationOptions(
 	crops []cropCandidate,
 	history []cropHistory,
 	seasons int,
 	priorities []string,
-	planID uuid.UUID,
-) []RotationResult {
+) ([]RotationResult, error) {
+	if seasons < 1 {
+		return nil, errors.New("number of seasons must be greater than zero")
+	}
 
-	strategies := []string{
-		"Balanced Rotation",
-		"Soil Restoration Focus",
-		"Water Conscious Rotation",
+	if len(crops) < seasons {
+		return nil, fmt.Errorf(
+			"%w: requested %d seasons but only %d distinct crops are available",
+			errInsufficientCrops,
+			seasons,
+			len(crops),
+		)
+	}
+
+	strategies := []rotationStrategyOption{
+		{name: "Balanced Rotation", strategy: balancedRotation},
+		{name: "Soil Restoration Focus", strategy: soilRestorationRotation},
+		{name: "Water Conscious Rotation", strategy: waterConsciousRotation},
 	}
 
 	results := make([]RotationResult, 0, len(strategies))
 
-	for strategyIndex, strategy := range strategies {
-
+	for _, strategy := range strategies {
 		sequence := make([]CropRecommendation, 0, seasons)
 		used := make(map[uuid.UUID]bool)
-
-		lastCropID := uuid.Nil
-		lastFamily := ""
+		usedFamilies := make(map[string]int)
 
 		for season := 1; season <= seasons; season++ {
-
 			crop := chooseCrop(
 				crops,
 				used,
-				lastCropID,
-				lastFamily,
+				usedFamilies,
 				history,
 				priorities,
-				strategyIndex,
+				strategy.strategy,
 			)
-
 			if crop == nil {
-				break
+				return nil, fmt.Errorf(
+					"%w: could not complete the requested %d-season sequence",
+					errInsufficientCrops,
+					seasons,
+				)
 			}
 
 			reason, benefits := explainCrop(
 				crop,
-				lastFamily,
+				usedFamilies,
+				history,
 				priorities,
-				strategyIndex,
+				strategy.strategy,
 			)
 
 			sequence = append(sequence, CropRecommendation{
@@ -359,34 +306,44 @@ func (s *Service) buildRotationOptions(
 			})
 
 			used[crop.ID] = true
-			lastCropID = crop.ID
-			lastFamily = crop.Family
+			family := normalizeLabel(crop.Family)
+			if family != "" {
+				usedFamilies[family]++
+			}
 		}
 
-		if len(sequence) == 0 {
-			continue
+		score, err := calculateRotationScore(sequence, crops)
+		if err != nil {
+			return nil, fmt.Errorf("calculate %s score: %w", strategy.name, err)
 		}
 
-		score := calculateRotationScore(
-			sequence,
-			crops,
-			history,
-		)
+		cropJSON, err := json.Marshal(sequence)
+		if err != nil {
+			return nil, fmt.Errorf("encode %s crop sequence: %w", strategy.name, err)
+		}
 
-		cropJSON, _ := json.Marshal(sequence)
+		scoresJSON, err := json.Marshal(score)
+		if err != nil {
+			return nil, fmt.Errorf("encode %s scores: %w", strategy.name, err)
+		}
 
-		scoresJSON, _ := json.Marshal(score)
-
-		explanationJSON, _ := json.Marshal([]string{
-			"Generated using transparent rule-based crop selection.",
-			"Crop diversity and nitrogen-fixing characteristics contribute to the score.",
-			"Climate suitability and measured soil conditions are not yet included.",
+		explanationJSON, err := json.Marshal([]string{
+			"Generated using deterministic, rule-based crop selection and catalogue records.",
+			"All scores are provisional heuristics, not measurements or predictions.",
+			"Diversity score is the share of the sequence represented by distinct recorded crop families.",
+			"Soil health proxy starts at 40 and adds up to 35 points for recorded nitrogen-fixing share and 25 for low recorded nutrient-demand share.",
+			"Climate score is fixed at 50 because climate observations are not used; it is not a climate-suitability score.",
+			"Soil health score is a catalogue-based proxy, not a measured soil condition or guaranteed restoration outcome.",
+			"Overall score weights the soil proxy at 40%, the climate placeholder at 20%, and diversity at 40%.",
+			"Unknown crop characteristics are not treated as low water or nutrient demand.",
 			"Review recommendations with a local agricultural extension officer.",
 		})
+		if err != nil {
+			return nil, fmt.Errorf("encode %s explanation: %w", strategy.name, err)
+		}
 
 		results = append(results, RotationResult{
-			PlanID:       planID,
-			PlanName:     strategy,
+			PlanName:     strategy.name,
 			CropSequence: cropJSON,
 			Scores:       scoresJSON,
 			Explanation:  explanationJSON,
@@ -394,19 +351,17 @@ func (s *Service) buildRotationOptions(
 		})
 	}
 
-	return results
+	return results, nil
 }
 
 func chooseCrop(
 	crops []cropCandidate,
 	used map[uuid.UUID]bool,
-	lastCropID uuid.UUID,
-	lastFamily string,
+	usedFamilies map[string]int,
 	history []cropHistory,
 	priorities []string,
-	strategy int,
+	strategy rotationStrategy,
 ) *cropCandidate {
-
 	var best *cropCandidate
 	bestScore := math.Inf(-1)
 
@@ -419,25 +374,26 @@ func chooseCrop(
 
 		score := 0.0
 
-		if crop.NitrogenFixing {
-			score += 3
+		family := normalizeLabel(crop.Family)
+		if family != "" {
+			if count := usedFamilies[family]; count == 0 {
+				diversityWeight := 4.0
+				if hasPriority(priorities, "crop diversity") {
+					diversityWeight += 3
+				}
+				score += diversityWeight
+			} else {
+				score -= float64(count) * 2
+			}
 		}
 
-		if crop.ID != lastCropID {
-			score += 2
-		}
-
-		if crop.Family != "" && crop.Family != lastFamily {
-			score += 2
-		}
-
-		for _, previous := range history {
+		for i, previous := range history {
 			if previous.CropID == crop.ID {
-				score -= 1
+				score -= 4 / float64(i+1)
 			}
 
-			if crop.Family != "" && previous.Family == crop.Family {
-				score -= 0.5
+			if family != "" && family == normalizeLabel(previous.Family) {
+				score -= 1 / float64(i+1)
 			}
 		}
 
@@ -446,17 +402,29 @@ func chooseCrop(
 		}
 
 		switch strategy {
-		case 1:
+		case soilRestorationRotation:
 			if crop.NitrogenFixing {
-				score += 4
+				score += 6
 			}
-		case 2:
-			if strings.EqualFold(crop.WaterRequirement, "low") {
-				score += 4
+
+			switch strings.ToLower(strings.TrimSpace(crop.NutrientDemand)) {
+			case "low":
+				score += 2
+			case "medium":
+				score++
+			case "high":
+				score--
+			}
+		case waterConsciousRotation:
+			switch strings.ToLower(strings.TrimSpace(crop.WaterRequirement)) {
+			case "low":
+				score += 6
+			case "high":
+				score -= 2
 			}
 		}
 
-		if score > bestScore {
+		if score > bestScore || (score == bestScore && candidateLess(crop, best)) {
 			bestScore = score
 			best = crop
 		}
@@ -465,30 +433,67 @@ func chooseCrop(
 	return best
 }
 
+func candidateLess(left, right *cropCandidate) bool {
+	if right == nil {
+		return true
+	}
+
+	leftName := normalizeLabel(left.Name)
+	rightName := normalizeLabel(right.Name)
+	if leftName != rightName {
+		return leftName < rightName
+	}
+
+	return left.ID.String() < right.ID.String()
+}
+
 func matchesPriority(
 	crop *cropCandidate,
 	priorities []string,
 ) bool {
-
 	for _, priority := range priorities {
-		priority = strings.ToLower(strings.TrimSpace(priority))
+		priority = normalizeLabel(priority)
 
 		if priority == "" {
 			continue
 		}
 
-		if strings.Contains(strings.ToLower(crop.Name), priority) ||
-			strings.Contains(strings.ToLower(crop.Category), priority) ||
-			strings.Contains(strings.ToLower(crop.Family), priority) {
+		switch priority {
+		case "vegetables":
+			priority = "vegetable"
+		case "cereals":
+			priority = "cereal"
+		case "legumes":
+			priority = "legume"
+		case "common bean", "common beans":
+			priority = "beans"
+		}
+
+		if strings.Contains(normalizeLabel(crop.Name), priority) ||
+			strings.Contains(normalizeLabel(crop.Category), priority) ||
+			strings.Contains(normalizeLabel(crop.Family), priority) {
 			return true
 		}
 
-		if priority == "soil health" && crop.NitrogenFixing {
+		if (priority == "soil health" || priority == "soil restoration") &&
+			crop.NitrogenFixing {
 			return true
 		}
 
-		if priority == "water conservation" &&
-			strings.EqualFold(crop.WaterRequirement, "low") {
+		if (priority == "water conservation" ||
+			priority == "water efficiency" ||
+			priority == "water saving") &&
+			strings.EqualFold(strings.TrimSpace(crop.WaterRequirement), "low") {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasPriority(priorities []string, expected string) bool {
+	for _, priority := range priorities {
+		if normalizeLabel(priority) == expected {
 			return true
 		}
 	}
@@ -498,22 +503,28 @@ func matchesPriority(
 
 func explainCrop(
 	crop *cropCandidate,
-	lastFamily string,
+	usedFamilies map[string]int,
+	history []cropHistory,
 	priorities []string,
-	strategy int,
+	strategy rotationStrategy,
 ) (string, []string) {
-
 	reasons := make([]string, 0)
 	benefits := make([]string, 0)
 
 	if crop.NitrogenFixing {
-		reasons = append(reasons, "This crop is recorded as nitrogen-fixing.")
-		benefits = append(benefits, "Potential contribution to biological nitrogen fixation.")
+		reasons = append(reasons, "The catalogue records nitrogen-fixing potential; actual fixation depends on field conditions.")
+		if strategy == soilRestorationRotation {
+			benefits = append(benefits, "Nitrogen-fixing potential is weighted by this strategy, not a claim of measured soil improvement.")
+		}
 	}
 
-	if crop.Family != "" && crop.Family != lastFamily {
-		reasons = append(reasons, "It introduces a different crop family from the previous season.")
+	family := normalizeLabel(crop.Family)
+	if family != "" && usedFamilies[family] == 0 {
+		reasons = append(reasons, "It adds a crop family not yet used in this sequence.")
 		benefits = append(benefits, "Supports crop-family diversification.")
+		if hasPriority(priorities, "crop diversity") {
+			reasons = append(reasons, "This also advances the farmer-stated crop-diversity priority.")
+		}
 	}
 
 	if matchesPriority(crop, priorities) {
@@ -521,27 +532,75 @@ func explainCrop(
 		benefits = append(benefits, "Aligned with farmer preferences.")
 	}
 
-	if strategy == 2 &&
-		strings.EqualFold(crop.WaterRequirement, "low") {
-		reasons = append(reasons, "It is recorded as having low water requirements.")
-		benefits = append(benefits, "May be a useful option where water is limited.")
+	if strategy == soilRestorationRotation {
+		switch strings.ToLower(strings.TrimSpace(crop.NutrientDemand)) {
+		case "low":
+			reasons = append(reasons, "Its recorded nutrient demand is low, which this strategy modestly favors.")
+		case "medium":
+			reasons = append(reasons, "Its recorded nutrient demand is medium.")
+		case "high":
+			reasons = append(reasons, "Its recorded nutrient demand is high, so this strategy does not favor it on that attribute.")
+		}
+	}
+
+	if strategy == waterConsciousRotation {
+		switch strings.ToLower(strings.TrimSpace(crop.WaterRequirement)) {
+		case "low":
+			reasons = append(reasons, "It is recorded as having low water requirements; this does not mean it is drought-proof or suitable for every dry region.")
+			benefits = append(benefits, "Low recorded water requirement is favored, not a guarantee of water suitability.")
+		case "medium":
+			reasons = append(reasons, "Its recorded water requirement is medium.")
+		case "high":
+			reasons = append(reasons, "Its recorded water requirement is high, so this strategy does not favor it on that attribute.")
+		}
+	}
+
+	if !appearsInHistory(crop.ID, history) {
+		reasons = append(reasons, "This crop is not present in the recent farm history considered.")
+	}
+
+	if crop.GrowthDuration != nil {
+		reasons = append(reasons, fmt.Sprintf(
+			"Catalogue duration is approximately %d days to maturity or first harvest; actual timing varies by variety and site.",
+			*crop.GrowthDuration,
+		))
 	}
 
 	if len(reasons) == 0 {
-		reasons = append(reasons, "Selected based on crop diversity and available crop records.")
+		reasons = append(reasons, "Selected using family diversity, recent crop history, farmer priorities, and available catalogue data.")
+	}
+
+	if crop.Family == "" || crop.Category == "" || crop.WaterRequirement == "" ||
+		crop.NutrientDemand == "" || crop.GrowthDuration == nil {
+		reasons = append(reasons, "Some crop characteristics are not recorded; unknown values were left neutral.")
 	}
 
 	return strings.Join(reasons, " "), benefits
 }
 
+func appearsInHistory(cropID uuid.UUID, history []cropHistory) bool {
+	for _, previous := range history {
+		if previous.CropID == cropID {
+			return true
+		}
+	}
+
+	return false
+}
+
+func normalizeLabel(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.NewReplacer("_", " ", "-", " ").Replace(value)
+
+	return strings.Join(strings.Fields(value), " ")
+}
+
 func calculateRotationScore(
 	sequence []CropRecommendation,
 	crops []cropCandidate,
-	history []cropHistory,
-) RotationScore {
-
+) (RotationScore, error) {
 	if len(sequence) == 0 {
-		return RotationScore{}
+		return RotationScore{}, errors.New("rotation sequence cannot be empty")
 	}
 
 	cropMap := make(map[uuid.UUID]cropCandidate)
@@ -551,38 +610,45 @@ func calculateRotationScore(
 	}
 
 	families := make(map[string]bool)
-
 	nitrogenFixingCount := 0
+	lowNutrientDemandCount := 0
+	seenCrops := make(map[uuid.UUID]bool)
 
-	for _, recommendation := range sequence {
+	for i, recommendation := range sequence {
 		crop, ok := cropMap[recommendation.CropID]
-		if !ok {
-			continue
+		if recommendation.CropID == uuid.Nil || !ok {
+			return RotationScore{}, fmt.Errorf("rotation sequence contains unknown crop ID %q", recommendation.CropID)
 		}
 
-		if crop.Family != "" {
-			families[crop.Family] = true
+		if seenCrops[recommendation.CropID] {
+			return RotationScore{}, fmt.Errorf("rotation sequence repeats crop %q", crop.Name)
+		}
+
+		if recommendation.Season != i+1 {
+			return RotationScore{}, fmt.Errorf("rotation sequence has invalid season number %d at position %d", recommendation.Season, i+1)
+		}
+		seenCrops[recommendation.CropID] = true
+
+		if family := normalizeLabel(crop.Family); family != "" {
+			families[family] = true
 		}
 
 		if crop.NitrogenFixing {
 			nitrogenFixingCount++
 		}
+
+		if strings.EqualFold(strings.TrimSpace(crop.NutrientDemand), "low") {
+			lowNutrientDemandCount++
+		}
 	}
 
-	diversityScore := math.Min(
-		100,
-		float64(len(families))*25,
-	)
+	diversityScore := float64(len(families)) / float64(len(sequence)) * 100
 
 	soilHealthScore := 40.0 +
-		float64(nitrogenFixingCount)*20
-
-	soilHealthScore = math.Min(100, soilHealthScore)
+		float64(nitrogenFixingCount)/float64(len(sequence))*35 +
+		float64(lowNutrientDemandCount)/float64(len(sequence))*25
 
 	climateScore := 50.0
-
-	// These are provisional heuristic scores, not measured outcomes.
-	// Climate data will be incorporated in a later engine version.
 
 	overall :=
 		soilHealthScore*0.4 +
@@ -594,5 +660,5 @@ func calculateRotationScore(
 		ClimateScore:    climateScore,
 		DiversityScore:  diversityScore,
 		OverallScore:    math.Round(overall*100) / 100,
-	}
+	}, nil
 }

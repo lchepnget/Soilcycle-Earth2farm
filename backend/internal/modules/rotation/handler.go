@@ -1,6 +1,7 @@
 package rotation
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
@@ -46,6 +47,9 @@ func (h *Handler) Generate(c fiber.Ctx) error {
 		case "farm not found":
 			status = fiber.StatusNotFound
 		case "no crops available for rotation planning":
+			status = fiber.StatusUnprocessableEntity
+		}
+		if errors.Is(err, errInsufficientCrops) {
 			status = fiber.StatusUnprocessableEntity
 		}
 

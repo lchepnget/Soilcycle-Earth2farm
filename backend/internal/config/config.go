@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -16,6 +17,10 @@ type Config struct {
 	DBPassword string
 	DBName     string
 	DBSSLMode  string
+
+	JWTSecret string
+
+	CORSAllowedOrigins []string
 }
 
 func Load() *Config {
@@ -31,6 +36,12 @@ func Load() *Config {
 		DBPassword: getEnv("DB_PASSWORD", ""),
 		DBName:     getEnv("DB_NAME", "soilcycle"),
 		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
+
+		JWTSecret: getEnv("JWT_SECRET", ""),
+
+		CORSAllowedOrigins: getOrigins(
+			getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),
+		),
 	}
 }
 
@@ -42,4 +53,18 @@ func getEnv(key, fallback string) string {
 	}
 
 	return value
+}
+
+func getOrigins(value string) []string {
+	var origins []string
+
+	for _, origin := range strings.Split(value, ",") {
+		origin = strings.TrimSpace(origin)
+
+		if origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+
+	return origins
 }

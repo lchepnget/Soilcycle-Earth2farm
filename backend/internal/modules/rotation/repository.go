@@ -43,6 +43,131 @@ func (r *Repository) FarmExists(
 	return exists, nil
 }
 
+// ListAvailableCrops retrieves crops and their optional characteristics.
+func (r *Repository) ListAvailableCrops(
+	ctx context.Context,
+) ([]cropCandidate, error) {
+	return readAvailableCrops(ctx, pgxCropQueryer{db: r.db})
+}
+
+type availableCropRows interface {
+	Close()
+	Next() bool
+	Scan(...any) error
+	Err() error
+}
+
+type availableCropQueryer interface {
+	Query(context.Context, string, ...any) (availableCropRows, error)
+}
+
+type pgxCropQueryer struct {
+	db *pgxpool.Pool
+}
+
+func (q pgxCropQueryer) Query(
+	ctx context.Context,
+	query string,
+	args ...any,
+) (availableCropRows, error) {
+	return q.db.Query(ctx, query, args...)
+}
+
+func readAvailableCrops(
+	ctx context.Context,
+	queryer availableCropQueryer,
+) ([]cropCandidate, error) {
+	rows, err := queryer.Query(
+		ctx,
+		`SELECT
+			c.id,
+			c.name,
+			COALESCE(c.crop_family, ''),
+			COALESCE(c.category, ''),
+			COALESCE(cc.nitrogen_fixing, FALSE),
+			COALESCE(cc.water_requirement, ''),
+			COALESCE(cc.nutrient_demand, ''),
+			cc.growth_duration_days
+		FROM crops c
+		LEFT JOIN crop_characteristics cc ON cc.crop_id = c.id
+		ORDER BY c.name`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve available crops: %w", err)
+	}
+
+	defer rows.Close()
+
+	crops := make([]cropCandidate, 0)
+
+	for rows.Next() {
+		var crop cropCandidate
+
+		if err := rows.Scan(
+			&crop.ID,
+			&crop.Name,
+			&crop.Family,
+			&crop.Category,
+			&crop.NitrogenFixing,
+			&crop.WaterRequirement,
+			&crop.NutrientDemand,
+			&crop.GrowthDuration,
+		); err != nil {
+			return nil, fmt.Errorf("scan crop: %w", err)
+		}
+
+		crops = append(crops, crop)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate crops: %w", err)
+	}
+
+	return crops, nil
+}
+
+// ListCropHistory retrieves crops previously grown on a farm.
+func (r *Repository) ListCropHistory(
+	ctx context.Context,
+	farmID uuid.UUID,
+) ([]cropHistory, error) {
+	rows, err := r.db.Query(
+		ctx,
+		`SELECT
+			fc.crop_id,
+			COALESCE(c.crop_family, '')
+		FROM farm_crops fc
+		JOIN crops c ON c.id = fc.crop_id
+		WHERE fc.farm_id = $1
+		ORDER BY fc.planting_date DESC NULLS LAST, fc.created_at DESC
+		LIMIT 10`,
+		farmID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve farm crop history: %w", err)
+	}
+
+	defer rows.Close()
+
+	history := make([]cropHistory, 0)
+
+	for rows.Next() {
+		var item cropHistory
+
+		if err := rows.Scan(&item.CropID, &item.Family); err != nil {
+			return nil, fmt.Errorf("scan crop history: %w", err)
+		}
+
+		history = append(history, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate crop history: %w", err)
+	}
+
+	return history, nil
+}
+
 // CreatePlan saves a new rotation plan.
 func (r *Repository) CreatePlan(
 	ctx context.Context,

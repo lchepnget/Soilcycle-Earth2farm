@@ -9,10 +9,16 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+
+	"github.com/soilcycle-earth2farm/backend/internal/config"
 )
 
 func TestRecoveryMiddlewareReturns500(t *testing.T) {
-	app := New(nil)
+	cfg := &config.Config{
+		CORSAllowedOrigins: []string{"http://localhost:3000"},
+	}
+
+	app := New(nil, cfg)
 
 	app.Get("/__test/recovery", func(c fiber.Ctx) error {
 		panic("intentional test panic")
@@ -37,7 +43,9 @@ func TestListenGracefulShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reserve test port: %v", err)
 	}
+
 	address := probe.Addr().String()
+
 	if err := probe.Close(); err != nil {
 		t.Fatalf("release test port: %v", err)
 	}
@@ -47,6 +55,7 @@ func TestListenGracefulShutdown(t *testing.T) {
 	defer cancel()
 
 	done := make(chan error, 1)
+
 	go func() {
 		done <- Listen(ctx, app, address)
 	}()

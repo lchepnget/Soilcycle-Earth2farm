@@ -13,18 +13,19 @@ import (
 )
 
 func Connect(cfg *config.Config) (*pgxpool.Pool, error) {
-	connectionURL := &url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(cfg.DBUser, cfg.DBPassword),
-		Host:   net.JoinHostPort(cfg.DBHost, cfg.DBPort),
-		Path:   "/" + cfg.DBName,
-	}
-
+	// Safely encode database credentials, including special characters.
 	query := url.Values{}
 	query.Set("sslmode", cfg.DBSSLMode)
-	connectionURL.RawQuery = query.Encode()
 
-	poolConfig, err := pgxpool.ParseConfig(connectionURL.String())
+	dsn := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.DBUser, cfg.DBPassword),
+		Host:     net.JoinHostPort(cfg.DBHost, cfg.DBPort),
+		Path:     "/" + cfg.DBName,
+		RawQuery: query.Encode(),
+	}
+
+	poolConfig, err := pgxpool.ParseConfig(dsn.String())
 	if err != nil {
 		return nil, fmt.Errorf("parse database config: %w", err)
 	}

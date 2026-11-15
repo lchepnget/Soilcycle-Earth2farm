@@ -9,6 +9,8 @@ import (
 
 	"github.com/soilcycle-earth2farm/backend/internal/config"
 	"github.com/soilcycle-earth2farm/backend/internal/database"
+	"github.com/soilcycle-earth2farm/backend/internal/middleware"
+	authmodule "github.com/soilcycle-earth2farm/backend/internal/modules/auth"
 	"github.com/soilcycle-earth2farm/backend/internal/modules/crops"
 	"github.com/soilcycle-earth2farm/backend/internal/modules/earthdata"
 	"github.com/soilcycle-earth2farm/backend/internal/modules/farmers"
@@ -24,19 +26,37 @@ func main() {
 	if err != nil {
 		log.Fatalf("Database connection failed: %v", err)
 	}
-
 	defer db.Close()
 
 	app := fiber.New()
 
 	app.Use(logger.New())
-	app.Use(cors.New())
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: cfg.CORSAllowedOrigins,
+		AllowHeaders: []string{
+			"Origin",
+			"Content-Type",
+			"Accept",
+			"Authorization",
+		},
+		AllowMethods: []string{
+			"GET",
+			"POST",
+			"PUT",
+			"PATCH",
+			"DELETE",
+			"OPTIONS",
+		},
+	}))
 
-	// API versioning
+	// API versioning and authentication.
 	api := app.Group("/api/v1")
+	api.Use(middleware.RequireAuth(cfg.JWTSecret))
+	authmodule.RegisterRoutes(api, db, cfg.JWTSecret)
 
 	// Register API routes
 
+	// Register API modules after authentication middleware.
 	crops.RegisterRoutes(api, db)
 	farmers.RegisterRoutes(api, db)
 	farms.RegisterRoutes(api, db)

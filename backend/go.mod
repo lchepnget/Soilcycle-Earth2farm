@@ -1,6 +1,6 @@
 module github.com/soilcycle-earth2farm/backend
 
-go 1.26.8
+go 1.27.4
 
 require (
 	github.com/gofiber/fiber/v3 v3.7.0

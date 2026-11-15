@@ -11,10 +11,11 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/soilcycle-earth2farm/backend/internal/config"
 )
 
 // New creates the configured Fiber application and registers all API routes.
-func New(db *pgxpool.Pool) *fiber.App {
+func New(db *pgxpool.Pool, cfg *config.Config) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName:      "SoilCycle by Earth2Farm",
 		ReadTimeout:  10 * time.Second,
@@ -41,7 +42,7 @@ func New(db *pgxpool.Pool) *fiber.App {
 		},
 	}))
 
-	RegisterRoutes(app, db)
+	RegisterRoutes(app, db, cfg)
 	return app
 }
 

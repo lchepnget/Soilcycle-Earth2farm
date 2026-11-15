@@ -121,7 +121,7 @@ Additional complementary data sources may include:
 soilcycle-earth2farm/
 │
 ├── backend/
-│   ├── cmd/
+│   ├──
 │   ├── internal/
 │   ├── pkg/
 │   ├── tests/
@@ -240,4 +240,12 @@ SoilCycle by Earth2Farm envisions a future where farmers can use environmental i
 
 **SoilCycle by Earth2Farm**
 
-*Smarter rotations. Healthier soils. Resilient farming.* 🌍🌱
+*Smarter rotations. Healthier soils. Resilient farming.*
+
+Smallholder farmers in Kisumu County often lack access to reliable, understandable soil and climate information when deciding what to plant each season.
+
+Continuous cultivation and poor crop rotation decisions can contribute to declining soil health, nutrient depletion, and inefficient water use.
+
+Although valuable environmental data exists through satellite technology, farmers often lack practical tools to turn that information into actionable farming decisions.
+
+We are addressing this gap by making soil and climate insights useful for smarter, more sustainable crop rotation.

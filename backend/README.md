@@ -81,41 +81,75 @@ NASA POWER API         PostgreSQL
 ## 3. Backend Folder Structure
 
 ```text
-backend/
-│
-├── main.go
-├── go.mod
-├── go.sum
-├── README.md
-│
-├── internal/
-│   ├── config/
-│   ├── database/
-│   └── modules/
-│       ├── farmers/
-│       ├── farms/
-│       ├── crops/
-│       ├── soil/
-│       ├── earthdata/
-│       └── rotation/
-│
-├── migrations/
-│
-└── .env.example
+Soilcycle-Earth2farm
+├── backend
+│   ├── go.mod
+│   ├── go.sum
+│   ├── internal
+│   │   ├── config
+│   │   │   └── config.go
+│   │   ├── database
+│   │   │   ├── migrations
+│   │   │   │   └── 001_initial_schema.sql
+│   │   │   ├── postgres.go
+│   │   │   └── seeds
+│   │   │       └── crops.sql
+│   │   ├── middleware
+│   │   │   ├── auth.go
+│   │   │   └── auth_test.go
+│   │   ├── modules
+│   │   │   ├── crops
+│   │   │   │   ├── dto.go
+│   │   │   │   ├── handler.go
+│   │   │   │   ├── model.go
+│   │   │   │   ├── repository.go
+│   │   │   │   ├── routes.go
+│   │   │   │   └── service.go
+│   │   │   ├── earthdata
+│   │   │   │   ├── client.go
+│   │   │   │   ├── dto.go
+│   │   │   │   ├── handler.go
+│   │   │   │   ├── routes.go
+│   │   │   │   └── service.go
+│   │   │   ├── farmers
+│   │   │   │   ├── dto.go
+│   │   │   │   ├── handler.go
+│   │   │   │   ├── model.go
+│   │   │   │   ├── repository.go
+│   │   │   │   ├── routes.go
+│   │   │   │   └── service.go
+│   │   │   ├── farms
+│   │   │   │   ├── dto.go
+│   │   │   │   ├── handler.go
+│   │   │   │   ├── model.go
+│   │   │   │   ├── repository.go
+│   │   │   │   ├── routes.go
+│   │   │   │   └── service.go
+│   │   │   ├── rotation
+│   │   │   │   ├── dto.go
+│   │   │   │   ├── handler.go
+│   │   │   │   ├── model.go
+│   │   │   │   ├── repository.go
+│   │   │   │   ├── routes.go
+│   │   │   │   └── service.go
+│   │   │   └── soil
+│   │   │       ├── dto.go
+│   │   │       ├── handler.go
+│   │   │       ├── model.go
+│   │   │       ├── repository.go
+│   │   │       ├── routes.go
+│   │   │       └── service.go
+│   │   └── server
+│   │       ├── routes.go
+│   │       ├── server.go
+│   │       └── server_test.go
+│   ├── main.go
+│   └── README.md
+└── README.md
+
+16 directories, 49 files
+
 ```
-
-Each module follows a layered structure where applicable:
-
-```text
-module/
-├── handler.go
-├── service.go
-├── repository.go
-├── model.go
-├── dto.go
-└── routes.go
-```
-
 ---
 
 # 4. Starting PostgreSQL with Docker
